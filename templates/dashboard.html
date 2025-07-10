@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Welcome, {{ user }}</h2>
+<p><strong>Current Balance:</strong> ₹{{ balance }}</p>
+
+<div class="row row-cols-1 row-cols-md-2 g-4 mt-4">
+  <!-- Deposit -->
+  <div class="col">
+    <div class="card h-100 text-white bg-success">
+      <div class="card-body">
+        <h5 class="card-title">💰 Deposit</h5>
+        <form method="post" action="/deposit">
+          <input class="form-control mb-2" name="amount" type="number" step="0.01" placeholder="Enter amount" required>
+          <button class="btn btn-light w-100">Deposit</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Withdraw -->
+  <div class="col">
+    <div class="card h-100 text-white bg-warning">
+      <div class="card-body">
+        <h5 class="card-title">🏧 Withdraw</h5>
+        <form method="post" action="/withdraw">
+          <input class="form-control mb-2" name="amount" type="number" step="0.01" placeholder="Enter amount" required>
+          <input class="form-control mb-2" name="pin" type="password" placeholder="Enter PIN" required>
+          <button class="btn btn-light w-100">Withdraw</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transfer -->
+  <div class="col">
+    <div class="card h-100 bg-primary text-white">
+      <div class="card-body">
+        <h5 class="card-title">🔁 Transfer</h5>
+        <p class="card-text">Send money to another account.</p>
+        <a class="btn btn-light w-100" href="/transfer">Transfer Money</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transactions -->
+  <div class="col">
+    <div class="card h-100 bg-info text-white">
+      <div class="card-body">
+        <h5 class="card-title">📜 Transactions</h5>
+        <p class="card-text">View your transaction history.</p>
+        <a class="btn btn-light w-100" href="/transactions">View Transactions</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export -->
+  <div class="col">
+    <div class="card h-100 bg-secondary text-white">
+      <div class="card-body">
+        <h5 class="card-title">📥 Download</h5>
+        <p class="card-text">Export your transactions as JSON.</p>
+        <a class="btn btn-light w-100" href="/export">Download</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Account -->
+  <div class="col">
+    <div class="card h-100 bg-danger text-white">
+      <div class="card-body">
+        <h5 class="card-title">🗑️ Delete Account</h5>
+        <p class="card-text">Permanently delete your account.</p>
+        <a class="btn btn-light w-100" href="/delete_account">Delete Account</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="text-center mt-4">
+  <a class="btn btn-outline-dark" href="/logout">🔓 Logout</a>
+</div>
+{% endblock %}
