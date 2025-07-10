@@ -8,6 +8,9 @@ USER_FILE = 'users.json'
 TX_FILE = 'transactions.json'
 
 # ------------------ Utilities ------------------
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
 
 def load_users():
     return json.load(open(USER_FILE)) if os.path.exists(USER_FILE) else {}
