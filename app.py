@@ -1,168 +1,210 @@
-from flask import Flask, render_template, request, redirect, session, flash, send_file
-import os, json, hashlib, datetime
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+import sqlite3
+import os
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key'
+app.secret_key = 'your_secret_key'  # Change in production
 
-DATA_DIR = 'data'
-USER_FILE = os.path.join(DATA_DIR, 'users.json')
-TX_FILE = os.path.join(DATA_DIR, 'transactions.json')
+DB_FILE = 'banking.db'
 
-os.makedirs(DATA_DIR, exist_ok=True)
-if not os.path.exists(USER_FILE): json.dump({}, open(USER_FILE, 'w'))
-if not os.path.exists(TX_FILE): json.dump([], open(TX_FILE, 'w'))
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password TEXT NOT NULL,
+        pin TEXT NOT NULL,
+        balance REAL DEFAULT 0.0
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        type TEXT,
+        amount REAL,
+        target TEXT,
+        timestamp TEXT
+    )''')
+    conn.commit()
+    conn.close()
 
-def load_users():
-    with open(USER_FILE) as f: return json.load(f)
+init_db()
 
-def save_users(users):
-    with open(USER_FILE, 'w') as f: json.dump(users, f, indent=2)
+# ---------------- User Functions ----------------
 
-def load_tx():
-    with open(TX_FILE) as f: return json.load(f)
+def get_user(username):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE username = ?", (username,))
+    user = c.fetchone()
+    conn.close()
+    return user
 
-def save_tx(txs):
-    with open(TX_FILE, 'w') as f: json.dump(txs, f, indent=2)
+def check_login(username, password):
+    user = get_user(username)
+    return user and user[1] == password
 
-def hash_pin(pin): return hashlib.sha256(pin.encode()).hexdigest()
+def verify_pin(username, pin):
+    user = get_user(username)
+    return user and user[2] == pin
 
-def log_tx(user, type_, amount, target=None):
-    txs = load_tx()
-    txs.append({
-        "user": user,
-        "type": type_,
-        "amount": amount,
-        "target": target,
-        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
-    save_tx(txs)
+# ---------------- Routes ----------------
 
 @app.route('/')
-def home(): return redirect('/login')
+def index():
+    if 'user' in session:
+        return redirect(url_for('dashboard'))
+    return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        name, pin = request.form['name'], request.form['pin']
-        users = load_users()
-        if name in users:
-            flash('User already exists.')
-        else:
-            users[name] = {'pin': hash_pin(pin), 'balance': 0}
-            save_users(users)
-            flash('Registered! Please log in.')
-            return redirect('/login')
-    return render_template("register.html")
+        username = request.form['username']
+        password = request.form['password']
+        pin = request.form['pin']
 
-@app.route('/login', methods=['GET', 'POST'])
+        if get_user(username):
+            flash("Username already exists.", "danger")
+            return redirect(url_for('register'))
+
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (username, password, pin, 0.0))
+        conn.commit()
+        conn.close()
+        flash("Registration successful. Please log in.", "success")
+        return redirect(url_for('index'))
+    return render_template('register.html')
+
+@app.route('/login', methods=['POST'])
 def login():
-    if request.method == 'POST':
-        name, pin = request.form['name'], request.form['pin']
-        users = load_users()
-        if name in users and users[name]['pin'] == hash_pin(pin):
-            session['user'] = name
-            flash('Login successful.')
-            return redirect('/dashboard')
-        else:
-            flash('Invalid credentials.')
-    return render_template("login.html")
+    username = request.form['username']
+    password = request.form['password']
+    if check_login(username, password):
+        session['user'] = username
+        flash("Logged in successfully.", "success")
+        return redirect(url_for('dashboard'))
+    flash("Invalid credentials.", "danger")
+    return redirect(url_for('index'))
 
 @app.route('/dashboard')
 def dashboard():
-    if 'user' not in session: return redirect('/login')
-    user = session['user']
-    balance = load_users()[user]['balance']
-    return render_template("dashboard.html", user=user, balance=balance)
+    if 'user' not in session:
+        return redirect(url_for('index'))
+    user = get_user(session['user'])
+    return render_template('dashboard.html', balance=user[3])
+
+@app.route('/deposit', methods=['POST'])
+def deposit():
+    if 'user' not in session:
+        return redirect(url_for('index'))
+    amount = float(request.form['amount'])
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE users SET balance = balance + ? WHERE username = ?", (amount, session['user']))
+    c.execute("INSERT INTO transactions (username, type, amount, target, timestamp) VALUES (?, 'deposit', ?, NULL, datetime('now'))",
+              (session['user'], amount))
+    conn.commit()
+    conn.close()
+    flash("Deposit successful.", "success")
+    return redirect(url_for('dashboard'))
+
+@app.route('/withdraw', methods=['POST'])
+def withdraw():
+    if 'user' not in session:
+        return redirect(url_for('index'))
+    amount = float(request.form['amount'])
+    pin = request.form['pin']
+    user = get_user(session['user'])
+
+    if not verify_pin(session['user'], pin):
+        flash("Incorrect PIN.", "danger")
+        return redirect(url_for('dashboard'))
+
+    if amount > user[3]:
+        flash("Insufficient funds.", "danger")
+        return redirect(url_for('dashboard'))
+
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE users SET balance = balance - ? WHERE username = ?", (amount, session['user']))
+    c.execute("INSERT INTO transactions (username, type, amount, target, timestamp) VALUES (?, 'withdraw', ?, NULL, datetime('now'))",
+              (session['user'], amount))
+    conn.commit()
+    conn.close()
+    flash("Withdrawal successful.", "success")
+    return redirect(url_for('dashboard'))
+
+@app.route('/transfer', methods=['POST'])
+def transfer():
+    if 'user' not in session:
+        return redirect(url_for('index'))
+    target = request.form['target']
+    amount = float(request.form['amount'])
+    pin = request.form['pin']
+    sender = get_user(session['user'])
+    receiver = get_user(target)
+
+    if not receiver:
+        flash("Target user does not exist.", "danger")
+        return redirect(url_for('dashboard'))
+
+    if not verify_pin(session['user'], pin):
+        flash("Incorrect PIN.", "danger")
+        return redirect(url_for('dashboard'))
+
+    if amount > sender[3]:
+        flash("Insufficient funds.", "danger")
+        return redirect(url_for('dashboard'))
+
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE users SET balance = balance - ? WHERE username = ?", (amount, session['user']))
+    c.execute("UPDATE users SET balance = balance + ? WHERE username = ?", (amount, target))
+    c.execute("INSERT INTO transactions (username, type, amount, target, timestamp) VALUES (?, 'transfer', ?, ?, datetime('now'))",
+              (session['user'], amount, target))
+    conn.commit()
+    conn.close()
+    flash("Transfer successful.", "success")
+    return redirect(url_for('dashboard'))
+
+@app.route('/transactions')
+def transactions():
+    if 'user' not in session:
+        return redirect(url_for('index'))
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT type, amount, target, timestamp FROM transactions WHERE username = ? ORDER BY timestamp DESC", (session['user'],))
+    history = c.fetchall()
+    conn.close()
+    return render_template('transactions.html', history=history)
+
+@app.route('/delete', methods=['POST'])
+def delete():
+    if 'user' not in session:
+        return redirect(url_for('index'))
+    pin = request.form['pin']
+    if not verify_pin(session['user'], pin):
+        flash("Incorrect PIN.", "danger")
+        return redirect(url_for('dashboard'))
+
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM users WHERE username = ?", (session['user'],))
+    c.execute("DELETE FROM transactions WHERE username = ?", (session['user'],))
+    conn.commit()
+    conn.close()
+    session.pop('user', None)
+    flash("Account deleted successfully.", "info")
+    return redirect(url_for('index'))
 
 @app.route('/logout')
 def logout():
     session.pop('user', None)
-    flash('Logged out.')
-    return redirect('/login')
+    flash("Logged out.", "info")
+    return redirect(url_for('index'))
 
-@app.route('/deposit', methods=['POST'])
-def deposit():
-    if 'user' not in session: return redirect('/login')
-    amount = float(request.form['amount'])
-    users = load_users()
-    users[session['user']]['balance'] += amount
-    save_users(users)
-    log_tx(session['user'], 'deposit', amount)
-    flash('Deposit successful.')
-    return redirect('/dashboard')
+# ---------------- Run App ----------------
 
-@app.route('/withdraw', methods=['POST'])
-def withdraw():
-    if 'user' not in session: return redirect('/login')
-    amount = float(request.form['amount'])
-    pin = request.form['pin']
-    users = load_users()
-    user = session['user']
-    if users[user]['pin'] != hash_pin(pin):
-        flash('Wrong PIN.')
-    elif users[user]['balance'] < amount:
-        flash('Insufficient balance.')
-    else:
-        users[user]['balance'] -= amount
-        save_users(users)
-        log_tx(user, 'withdraw', amount)
-        flash('Withdraw successful.')
-    return redirect('/dashboard')
-
-@app.route('/transfer', methods=['GET', 'POST'])
-def transfer():
-    if 'user' not in session: return redirect('/login')
-    if request.method == 'POST':
-        user = session['user']
-        target, amount, pin = request.form['target'], float(request.form['amount']), request.form['pin']
-        users = load_users()
-        if users[user]['pin'] != hash_pin(pin):
-            flash('Wrong PIN.')
-        elif target not in users:
-            flash('Recipient not found.')
-        elif users[user]['balance'] < amount:
-            flash('Insufficient funds.')
-        else:
-            users[user]['balance'] -= amount
-            users[target]['balance'] += amount
-            save_users(users)
-            log_tx(user, 'transfer_out', amount, target)
-            log_tx(target, 'transfer_in', amount, user)
-            flash('Transfer complete.')
-            return redirect('/dashboard')
-    return render_template("transfer.html")
-
-@app.route('/transactions')
-def transactions():
-    if 'user' not in session: return redirect('/login')
-    txs = [t for t in load_tx() if t['user'] == session['user']]
-    return render_template("transactions.html", txs=txs)
-
-@app.route('/delete_account', methods=['GET', 'POST'])
-def delete_account():
-    if 'user' not in session: return redirect('/login')
-    if request.method == 'POST':
-        pin = request.form['pin']
-        users = load_users()
-        user = session['user']
-        if users[user]['pin'] == hash_pin(pin):
-            del users[user]
-            save_users(users)
-            session.pop('user')
-            flash('Account deleted.')
-            return redirect('/register')
-        else:
-            flash('Incorrect PIN.')
-    return render_template("delete_account.html")
-
-@app.route('/export')
-def export():
-    if 'user' not in session: return redirect('/login')
-    txs = [t for t in load_tx() if t['user'] == session['user']]
-    path = f"data/{session['user']}_transactions.json"
-    with open(path, 'w') as f: json.dump(txs, f, indent=2)
-    return send_file(path, as_attachment=True)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=True, host="0.0.0.0", port=port)
