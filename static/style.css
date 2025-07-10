@@ -1,0 +1,36 @@
+body {
+    background-color: #ffffff;
+    color: #2a2a2a;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+h1, h2, h5, p, label {
+    color: #030303;
+}
+
+input, select, textarea {
+    background-color: #444;
+    color: #fff;
+    border: 1px solid #555;
+}
+
+input::placeholder {
+    color: #aaa;
+}
+
+button {
+    margin-top: 5px;
+}
+
+.card {
+    border: none;
+    box-shadow: 0 0 8px rgba(0,0,0,0.4);
+}
+
+a {
+    color: #66b3ff;
+}
+a:hover {
+    color: #ffffff;
+    text-decoration: underline;
+}
