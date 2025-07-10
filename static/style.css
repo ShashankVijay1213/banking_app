@@ -1,21 +1,21 @@
 body {
-    background-color: #ffffff;
-    color: #ffffff;
+    background-color: #ffffff;  /* ← White background */
+    color: #000000;             /* ← Black text */
     font-family: 'Segoe UI', sans-serif;
 }
 
 h1, h2, h5, p, label {
-    color: #030303;
+    color: #000000;
 }
 
 input, select, textarea {
-    background-color: #444;
-    color: #fff;
-    border: 1px solid #555;
+    background-color: #f1f1f1;
+    color: #000;
+    border: 1px solid #ccc;
 }
 
 input::placeholder {
-    color: #aaa;
+    color: #777;
 }
 
 button {
@@ -24,13 +24,13 @@ button {
 
 .card {
     border: none;
-    box-shadow: 0 0 8px rgba(0,0,0,0.4);
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
 }
 
 a {
-    color: #66b3ff;
+    color: #007bff;
 }
 a:hover {
-    color: #ffffff;
+    color: #0056b3;
     text-decoration: underline;
 }
