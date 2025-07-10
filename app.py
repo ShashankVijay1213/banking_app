@@ -56,35 +56,44 @@ def index():
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        pin = request.form['pin']
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        pin = request.form.get("pin")
 
-        if get_user(username):
-            flash("Username already exists.", "danger")
-            return redirect(url_for('register'))
+        if not username or not password or not pin:
+            return "All fields are required", 400
 
-        conn = sqlite3.connect(DB_FILE)
+        if len(pin) != 4 or not pin.isdigit():
+            return "PIN must be a 4-digit number", 400
+
+        conn = sqlite3.connect("banking.db")
         c = conn.cursor()
-        c.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (username, password, pin, 0.0))
-        conn.commit()
-        conn.close()
-        flash("Registration successful. Please log in.", "success")
-        return redirect(url_for('index'))
-    return render_template('register.html')
+        try:
+            c.execute("INSERT INTO users (username, password, pin, balance) VALUES (?, ?, ?, ?)",
+                      (username, password, pin, 0.0))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            return "Username already exists", 400
 
-@app.route('/login', methods=['POST'])
+        conn.close()
+        return redirect(url_for("login"))
+
+    return render_template("register.html")
+
+
+@app.route("/login", methods=["POST"])
 def login():
-    username = request.form['username']
-    password = request.form['password']
-    if check_login(username, password):
-        session['user'] = username
-        flash("Logged in successfully.", "success")
-        return redirect(url_for('dashboard'))
-    flash("Invalid credentials.", "danger")
-    return redirect(url_for('index'))
+    username = request.form.get("username")
+    password = request.form.get("password")
+
+    if not username or not password:
+        return "Missing credentials", 400
+    # Continue login logic
+
 
 @app.route('/dashboard')
 def dashboard():
