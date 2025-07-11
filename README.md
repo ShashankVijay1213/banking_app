@@ -18,7 +18,7 @@ This app allows users to register, log in, deposit and withdraw funds, transfer 
 
 ## 🖥️ Demo
 
-Try it live: [[(https://banking-app-wmj7.onrender.com)](https://banking-app-wmj7.onrender.com)]
+Try it live: [(https://shashankv1213.pythonanywhere.com/login)]
 
 ---
 ![Homepage Screenshot](images/1.png)
